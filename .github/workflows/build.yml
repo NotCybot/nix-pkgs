@@ -1,0 +1,113 @@
+name: Build
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # Tailscale workload identity
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CACHE_URL: ${{ secrets.HIBERNATION_URL }} # no trailing slash
+  CACHE_NAME: main
+
+jobs:
+  prepare:
+    name: Find uncached packages
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
+
+      # the cache is only reachable through the tailnet (subnet route + split DNS)
+      - uses: tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd # v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          audience: ${{ secrets.TS_AUDIENCE }}
+          tags: tag:ci
+          args: --accept-routes
+      - name: Wait for cache
+        timeout-minutes: 2
+        run: until curl -s -o /dev/null "$CACHE_URL/api/health"; do sleep 3; done
+
+      - id: matrix
+        env:
+          HIBERNATION_TOKEN: ${{ secrets.HIBERNATION_TOKEN }}
+        run: |
+          set -euo pipefail
+          cached() {
+            local hash
+            hash=$(basename "$1" | cut -d- -f1)
+            curl -sf -o /dev/null "https://cache.nixos.org/$hash.narinfo" \
+              || curl -sf -o /dev/null "https://nix-community.cachix.org/$hash.narinfo" \
+              || curl -sf -o /dev/null -u "x:$HIBERNATION_TOKEN" "$CACHE_URL/api/nix/$CACHE_NAME/$hash.narinfo"
+          }
+
+          # { system = { package = [ outPath ... ]; }; }
+          nix eval --json .#packages --apply 'builtins.mapAttrs (_: builtins.mapAttrs (_: p: map (o: p.${o}.outPath) (p.outputs or [ "out" ])))' > outs.json
+
+          jobs="[]"
+          while IFS=$'\t' read -r system pkg outs; do
+            missing=0
+            for out in $outs; do cached "$out" || { missing=1; break; }; done
+            if [ "$missing" = 1 ]; then
+              echo "build $system.$pkg"
+              jobs=$(jq -c --arg s "$system" --arg p "$pkg" '. + [{system: $s, package: $p}]' <<<"$jobs")
+            else
+              echo "cached $system.$pkg"
+            fi
+          done < <(jq -r 'to_entries[] | .key as $s | .value | to_entries[] | [$s, .key, (.value | join(" "))] | @tsv' outs.json)
+
+          echo "matrix=$jobs" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: ${{ matrix.package }} (${{ matrix.system }})
+    needs: prepare
+    if: needs.prepare.outputs.matrix != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    runs-on: ${{ matrix.system == 'aarch64-darwin' && 'macos-latest' || 'ubuntu-latest' }}
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
+      - uses: tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd # v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          audience: ${{ secrets.TS_AUDIENCE }}
+          tags: tag:ci
+          args: --accept-routes
+      - name: Wait for cache
+        timeout-minutes: 2
+        run: until curl -s -o /dev/null "$CACHE_URL/api/health"; do sleep 3; done
+      - uses: profiidev/hibernation@d1d0857b79670ea9edb16431850bff98f93cdcbe # v0
+        with:
+          url: ${{ env.CACHE_URL }}/
+          token: ${{ secrets.HIBERNATION_TOKEN }}
+          signing-key: ${{ secrets.HIBERNATION_SIGNING_KEY }}
+
+      - name: Build
+        id: build
+        run: |
+          {
+            echo 'paths<<EOF'
+            nix build ".#packages.${{ matrix.system }}.${{ matrix.package }}^*" -L --no-link --print-out-paths
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Push
+        env:
+          PATHS: ${{ steps.build.outputs.paths }}
+        run: |
+          for p in $PATHS; do hibernation push "$CACHE_NAME" "$p"; done
