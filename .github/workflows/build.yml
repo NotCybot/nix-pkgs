@@ -112,3 +112,13 @@ jobs:
           PATHS: ${{ steps.build.outputs.paths }}
         run: |
           for p in $PATHS; do hibernation push "$CACHE_NAME" "$p"; done
+
+  result:
+    name: Build result
+    needs: [prepare, build]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          [ "${{ needs.prepare.result }}" = success ] || exit 1
+          case "${{ needs.build.result }}" in success | skipped) ;; *) exit 1 ;; esac
