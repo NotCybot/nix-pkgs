@@ -34,7 +34,6 @@ jobs:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           audience: ${{ secrets.TS_AUDIENCE }}
           tags: tag:ci
-          args: --accept-routes
       - name: Wait for cache
         timeout-minutes: 2
         run: until curl -s -o /dev/null "$CACHE_URL/api/health"; do sleep 3; done
@@ -87,7 +86,6 @@ jobs:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           audience: ${{ secrets.TS_AUDIENCE }}
           tags: tag:ci
-          args: --accept-routes
       - name: Wait for cache
         timeout-minutes: 2
         run: until curl -s -o /dev/null "$CACHE_URL/api/health"; do sleep 3; done
