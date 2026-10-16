@@ -98,9 +98,12 @@ jobs:
       - name: Build
         id: build
         run: |
+          attr='.#packages.${{ matrix.system }}."${{ matrix.package }}"' # quoted, names can contain dots
           {
             echo 'paths<<EOF'
-            nix build ".#packages.${{ matrix.system }}.${{ matrix.package }}^*" -L --no-link --print-out-paths
+            nix build "$attr^*" -L --no-link --print-out-paths
+            # sources too, upstream downloads (e.g. webots nightlies) can disappear
+            nix build "$attr.src" --no-link --print-out-paths 2>/dev/null || true
             echo EOF
           } >> "$GITHUB_OUTPUT"
 

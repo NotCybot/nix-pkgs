@@ -76,6 +76,8 @@ externalPkgs
   };
 
   hypr-kdeconnect-fix = final.callPackage ./packages/hypr-kdeconnect-fix.nix { };
+  claude-desktop = final.callPackage ./packages/claude-desktop.nix { };
+  webots = final.callPackage ./packages/webots.nix { };
 
   home-assistant-vicinae-extension = raycast "home-assistant-vicinae-extension" (
     raycastSrc "homeassistant" "sha256-lSEtzYw96imTNHNW/VxxZZxyhOP6q490YnV8fYdpt3Y="

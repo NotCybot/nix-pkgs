@@ -15,13 +15,11 @@ Custom packages and overlay, built by CI and pushed to a Hibernation cache over 
 ## Usage
 
 ```nix
-inputs = {
-  custom-nixpkgs.url = "github:NotCybot/nix-pkgs";
-  # same nixpkgs as CI, otherwise overlay packages miss the cache
-  nixpkgs-unstable.follows = "custom-nixpkgs/nixpkgs";
-};
+inputs.custom-nixpkgs.url = "github:NotCybot/nix-pkgs";
 
 nixpkgs.overlays = [ inputs.custom-nixpkgs.overlays.default ];
 ```
 
 Add the cache as substituter with its public key. What CI builds: `packages.nix`.
+
+Cache hits need the same nixpkgs commit as this repo's `flake.lock`: update both locks together.

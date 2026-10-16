@@ -65,7 +65,9 @@
             overlays = [ overlay ];
           };
         in
-        nixpkgs.lib.genAttrs names (name: pkgs.${name})
+        nixpkgs.lib.genAttrs names (
+          name: nixpkgs.lib.getAttrFromPath (nixpkgs.lib.splitString "." name) pkgs
+        )
       ) buildList;
 
       # nix-config imports modules from these

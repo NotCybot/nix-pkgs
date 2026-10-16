@@ -30,9 +30,13 @@
     "hypr-kdeconnect-fix"
     "hibernation"
     "ollama-cuda"
+    "linuxPackages.nvidiaPackages.latest" # meitner
+    "linuxPackages.nvidiaPackages.legacy_580" # kopernikus
   ];
 
   aarch64-darwin = [
     "hibernation"
+    "lixPackageSets.latest.lix"
+    "webots"
   ];
 }
