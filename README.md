@@ -9,7 +9,7 @@ Custom packages and overlay, built by CI and pushed to a Hibernation cache over 
 | `HIBERNATION_URL` | Cache base URL, no trailing `/` |
 | `HIBERNATION_TOKEN` | Token of a Hibernation user with edit access to cache `main` |
 | `HIBERNATION_SIGNING_KEY` | Secret signing key of the cache |
-| `TS_OAUTH_CLIENT_ID`, `TS_AUDIENCE` | Tailscale OIDC trust credential: issuer GitHub, subject `repo:NotCybot/nix-pkgs:*`, Auth Keys write, tag `tag:ci` |
+| `TS_OAUTH_CLIENT_ID`, `TS_AUDIENCE` | Tailscale OIDC trust credential: issuer GitHub, subject `repo:NotCybot@141260979/nix-pkgs@1422165276:*` (GitHub uses owner/repo IDs in `sub`), Auth Keys write, tag `tag:ci` |
 | `RENOVATE_APP_CLIENT_ID`, `RENOVATE_APP_PRIVATE_KEY` | GitHub App installed on this repo |
 
 ## Usage
