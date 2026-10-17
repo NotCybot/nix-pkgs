@@ -61,6 +61,9 @@ externalPkgs
   inherit (inputs.hyprland.packages.${system}) hyprland xdg-desktop-portal-hyprland;
   hibernation = inputs.hibernation.packages.${system}.default;
 
+  #nvidia-smi --query-gpu=name,compute_cap --format=csv
+  ollama-cuda = prev.ollama-cuda.override { cudaArches = [ "sm_86" ]; };
+
   vicinae-with-soulver = final.symlinkJoin {
     name = "${vicinaeDefaultStdenv.name}-with-soulver";
     paths = [ vicinaeDefaultStdenv ];
