@@ -1,4 +1,10 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["github>NotCybot/renovate-config"]
+  "extends": ["github>NotCybot/renovate-config"],
+  "nix": {
+    "enabled": false
+  },
+  "lockFileMaintenance": {
+    "enabled": false
+  }
 }
