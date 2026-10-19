@@ -89,7 +89,7 @@ jobs:
       - name: Wait for cache
         timeout-minutes: 2
         run: until curl -s -o /dev/null "$CACHE_URL/api/health"; do sleep 3; done
-      - uses: profiidev/hibernation@d1d0857b79670ea9edb16431850bff98f93cdcbe # v0
+      - uses: profiidev/hibernation@81c876ed6ccfb37faad782e01aebe01f9338dfa6 # v0
         with:
           url: ${{ env.CACHE_URL }}/
           token: ${{ secrets.HIBERNATION_TOKEN }}
