@@ -6,6 +6,7 @@ on:
     branches: [main]
   schedule:
     - cron: "17 1 * * 1"
+    - cron: "17 1 1 * *" # 1st of the month: everything except lock file maintenance
   issues:
     types: [edited]
   pull_request:
