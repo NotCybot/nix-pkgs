@@ -37,6 +37,6 @@
   aarch64-darwin = [
     "hibernation"
     "lixPackageSets.latest.lix"
-    "webots"
+    # "webots"
   ];
 }
