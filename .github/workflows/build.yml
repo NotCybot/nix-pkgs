@@ -99,19 +99,27 @@ jobs:
         id: build
         run: |
           attr='.#packages.${{ matrix.system }}."${{ matrix.package }}"' # quoted, names can contain dots
-          paths=$(nix build "$attr^*" -L --no-link --print-out-paths)
-          # sources too, upstream downloads (e.g. webots nightlies) can disappear
-          srcs=$(nix build "$attr.src" --no-link --print-out-paths 2>/dev/null || true)
-          printf 'paths<<EOF\n%s\nEOF\nsrcs<<EOF\n%s\nEOF\n' "$paths" "$srcs" >> "$GITHUB_OUTPUT"
+          {
+            echo 'paths<<EOF'
+            nix build "$attr^*" -L --no-link --print-out-paths
+            # sources too, upstream downloads (e.g. webots nightlies) can disappear
+            nix build "$attr.src" --no-link --print-out-paths 2>/dev/null || true
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
 
       - name: Push
         env:
           PATHS: ${{ steps.build.outputs.paths }}
-          SRCS: ${{ steps.build.outputs.srcs }}
         run: |
-          for p in $PATHS; do hibernation push "$CACHE_NAME" "$p"; done
-          # ponytail: best effort, a dropped upload of a big source (nvidia .run) shouldn't fail a green build
-          for p in $SRCS; do hibernation push "$CACHE_NAME" "$p" || echo "::warning::source push failed: $p"; done
+          # big uploads (nvidia .run, 379 MiB) sometimes drop at 100%, push skips what's already there
+          push() {
+            for i in 1 2 3; do
+              hibernation push "$CACHE_NAME" "$1" && return
+              echo "::warning::push failed ($i/3): $1"
+            done
+            return 1
+          }
+          for p in $PATHS; do push "$p"; done
 
   result:
     name: Build result
