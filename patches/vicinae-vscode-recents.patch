@@ -1,0 +1,90 @@
+diff --git a/src/util/database.ts b/src/util/database.ts
+--- a/src/util/database.ts	2026-08-24 16:39:53
++++ b/src/util/database.ts	2026-08-24 16:40:03
+@@ -5,6 +5,7 @@
+ import initSqlJs, { Database } from "sql.js";
+ import { getVSCodeStateDBPath } from "../helpers";
+ import { RECENT_PROJECTS_QUERY, SQL_WASM_PATH } from "../constants";
++import { readRecentsFromStorageJson } from "./menubar-fallback";
+ 
+ const read = promisify(readFile);
+ const write = promisify(writeFile);
+@@ -57,6 +58,15 @@
+         }
+ 
+         statement.free();
++
++        // VS Code 1.13x dropped this key; fall back to the storage.json menu cache.
++        if (results.length === 0) {
++            const fallback = readRecentsFromStorageJson();
++            if (fallback) {
++                results.push({ key: "history.recentlyOpenedPathsList", value: fallback });
++            }
++        }
++
+         return results;
+     } catch (error) {
+         console.error("Failed to query the database", error);
+diff --git a/src/util/menubar-fallback.ts b/src/util/menubar-fallback.ts
+--- a/src/util/menubar-fallback.ts	1970-01-01 01:00:00
++++ b/src/util/menubar-fallback.ts	2026-08-24 16:39:53
+@@ -0,0 +1,59 @@
++import { homedir } from "os";
++import { existsSync, readFileSync } from "fs";
++import { getPreferenceValues } from "@vicinae/api";
++import type { Preferences } from "../types";
++
++// VS Code 1.13x no longer keeps `history.recentlyOpenedPathsList` in state.vscdb.
++// The same list still exists in storage.json, as the cached "File > Open Recent"
++// submenu, which is what this reads. It is a cache, not an API: treat a missing
++// or changed shape as "no recents" rather than an error.
++const STORAGE_JSON = {
++    linux: (home: string, flavour: string) => `${home}/.config/${flavour}/User/globalStorage/storage.json`,
++    win32: (home: string, flavour: string) => `${home}/AppData/Roaming/${flavour}/User/globalStorage/storage.json`,
++    darwin: (home: string, flavour: string) => `${home}/Library/Application Support/${flavour}/User/globalStorage/storage.json`,
++} as const;
++
++type MenuItem = {
++    id?: string;
++    label?: string;
++    uri?: { path?: string; scheme?: string; authority?: string };
++    submenu?: { items?: MenuItem[] };
++};
++
++export function readRecentsFromStorageJson(): string | null {
++    const home = homedir();
++    const { vscodeFlavour } = getPreferenceValues<Preferences>();
++    const platform = process.platform as keyof typeof STORAGE_JSON;
++    const file = (STORAGE_JSON[platform] ?? STORAGE_JSON.linux)(home, vscodeFlavour);
++
++    if (!existsSync(file)) return null;
++
++    try {
++        const raw = JSON.parse(readFileSync(file, "utf8"));
++        const items: MenuItem[] = raw?.lastKnownMenubarData?.menus?.File?.items ?? [];
++        const submenu = items.find((i) => i.submenu?.items?.some((s) => s.id?.startsWith("openRecent")));
++        const recents = submenu?.submenu?.items ?? [];
++
++        const entries = recents
++            .filter((i) => i.id?.startsWith("openRecent") && i.uri?.path)
++            .map((i) => {
++                const uri = i.uri as { path: string; scheme?: string; authority?: string };
++                const target = `${uri.scheme ?? "file"}://${uri.authority ?? ""}${encodeURI(uri.path)}`;
++                const entry: Record<string, unknown> = { label: i.label };
++                if (uri.authority) entry.remoteAuthority = uri.authority;
++
++                if (i.id === "openRecentWorkspace") entry.workspace = { id: uri.path, configPath: target };
++                else if (i.id === "openRecentFile") entry.fileUri = target;
++                else entry.folderUri = target;
++
++                return entry;
++            });
++
++        if (entries.length === 0) return null;
++        console.log(`[DEBUG] Recents from storage.json menubar cache: ${entries.length}`);
++        return JSON.stringify({ entries });
++    } catch (error) {
++        console.error("Failed to read recents from storage.json", error);
++        return null;
++    }
++}

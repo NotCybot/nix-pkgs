@@ -36,8 +36,8 @@
       };
     };
 
-    noctalia = {
-      url = "github:noctalia-dev/noctalia";
+    corona = {
+      url = "github:profiidev/corona";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -50,27 +50,34 @@
   outputs =
     inputs@{ nixpkgs, ... }:
     let
+      inherit (nixpkgs) lib;
       overlay = import ./overlay.nix inputs;
       buildList = import ./packages.nix;
+      systems = lib.unique (buildList.auto ++ builtins.attrNames buildList.extra);
     in
     {
-      overlays.default = overlay;
+      overlays.default = overlay.default;
 
-      packages = nixpkgs.lib.mapAttrs (
-        system: names:
+      packages = lib.genAttrs systems (
+        system:
         let
           pkgs = import nixpkgs {
             inherit system;
             config.allowUnfree = true;
-            overlays = [ overlay ];
+            overlays = [ overlay.default ];
           };
+          auto = lib.optionals (builtins.elem system buildList.auto) (
+            builtins.filter (name: lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.${name}) (
+              overlay.names pkgs
+            )
+          );
         in
-        nixpkgs.lib.genAttrs names (
-          name: nixpkgs.lib.getAttrFromPath (nixpkgs.lib.splitString "." name) pkgs
+        lib.genAttrs (auto ++ buildList.extra.${system} or [ ]) (
+          name: lib.getAttrFromPath (lib.splitString "." name) pkgs
         )
-      ) buildList;
+      );
 
       # nix-config imports modules from these
-      inherit (inputs) hyprland vicinae noctalia;
+      inherit (inputs) hyprland vicinae corona;
     };
 }
