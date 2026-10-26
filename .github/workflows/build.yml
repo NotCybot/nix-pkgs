@@ -111,15 +111,7 @@ jobs:
         env:
           PATHS: ${{ steps.build.outputs.paths }}
         run: |
-          # big uploads (nvidia .run, 379 MiB) sometimes drop at 100%, push skips what's already there
-          push() {
-            for i in 1 2 3; do
-              hibernation push "$CACHE_NAME" "$1" && return
-              echo "::warning::push failed ($i/3): $1"
-            done
-            return 1
-          }
-          for p in $PATHS; do push "$p"; done
+          for p in $PATHS; do hibernation push "$CACHE_NAME" "$p"; done
 
   result:
     name: Build result
