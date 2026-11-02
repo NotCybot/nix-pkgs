@@ -91,6 +91,15 @@ jobs:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           audience: ${{ secrets.TS_AUDIENCE }}
           tags: tag:ci
+      # tailscale/github-action#315: on macOS the action points all DNS at 100.100.100.100, which drops public
+      # names (github.com). Back to the runner's DNS; only the cache host still goes to the tailnet resolver.
+      - name: Fix DNS on macOS
+        if: runner.os == 'macOS'
+        run: |
+          host=${CACHE_URL#*://}
+          sudo networksetup -setdnsservers Ethernet Empty
+          sudo mkdir -p /etc/resolver
+          echo 'nameserver 100.100.100.100' | sudo tee "/etc/resolver/${host%%/*}" >/dev/null
       - name: Wait for cache
         timeout-minutes: 2
         run: until curl -s -o /dev/null "$CACHE_URL/api/health"; do sleep 3; done
