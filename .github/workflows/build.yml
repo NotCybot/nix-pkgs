@@ -80,7 +80,12 @@ jobs:
     timeout-minutes: 360
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # dependencies we built before (e.g. openusd for blender-cuda) come from our cache instead of rebuilding
       - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31
+        with:
+          extra_nix_config: |
+            extra-substituters = ${{ env.CACHE_URL }}/api/nix/${{ env.CACHE_NAME }}
+            extra-trusted-public-keys = hibernation-main-1:55dN5jsloavB+taHqzrK5QFR/RwkTRic1CixUxfpbdU=
       - uses: tailscale/github-action@064b10558093f38325e838ddea35486bdc6b1d5c # v4
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
@@ -89,6 +94,14 @@ jobs:
       - name: Wait for cache
         timeout-minutes: 2
         run: until curl -s -o /dev/null "$CACHE_URL/api/health"; do sleep 3; done
+      # the cache needs auth for reads too; /etc/nix/netrc is nix's default netrc-file
+      - name: Cache credentials
+        env:
+          TOKEN: ${{ secrets.HIBERNATION_TOKEN }}
+        run: |
+          host=${CACHE_URL#*://}
+          printf 'machine %s\nlogin x\npassword %s\n' "${host%%/*}" "$TOKEN" | sudo tee /etc/nix/netrc >/dev/null
+          sudo chmod 600 /etc/nix/netrc
       - uses: profiidev/hibernation@9cec325f2f8d8a4518df896ebee4563287d276f7 # v0
         with:
           url: ${{ env.CACHE_URL }}/
