@@ -41,11 +41,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1794169126,
-        "narHash": "sha256-l7E6LT7OSk1UzdFuwwfcWEEPG4FmHojI6hmCCZ68ctU=",
+        "lastModified": 1794210356,
+        "narHash": "sha256-kKc+N5qOu2v7uedrMaw851W3oYiuBbK41AVyAZNhX88=",
         "owner": "profiidev",
         "repo": "corona",
-        "rev": "d8ba6c3eee457ef1657cef40eaf7780bdb539d13",
+        "rev": "e05dd6dd8d533a7816c6a78730ddacd9c5bb89bb",
         "type": "github"
       },
       "original": {
@@ -132,11 +132,11 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1793014190,
-        "narHash": "sha256-yXZqC6JJCNPqvUxrzA1ToUzLt+ajXqE6IX22ZGsNvcs=",
+        "lastModified": 1794214648,
+        "narHash": "sha256-2IpFQoGqs4KekG33izL8IcTRiJMFOP4ARratYMP5ypI=",
         "owner": "profiidev",
         "repo": "hibernation",
-        "rev": "9cec325f2f8d8a4518df896ebee4563287d276f7",
+        "rev": "b69ccdb174d77f46c5921de1b4fe00da1a6ec114",
         "type": "github"
       },
       "original": {
@@ -577,11 +577,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793000331,
-        "narHash": "sha256-6sLQgHX/V/yF8VrhmsJroujeRua1GY3nDTEpnY7tHF4=",
+        "lastModified": 1794127728,
+        "narHash": "sha256-QhZ104DwHvvMxWxmI13zdppISE27UmdqhRI2VwBg/yU=",
         "owner": "oxalica",
         "repo": "rust-overlay",
-        "rev": "0d0575988e4bb9ebc4cf1afb1cec1ceac0b5914e",
+        "rev": "51c6dc40d18552701f7c5c62e3f7a5fc899f7132",
         "type": "github"
       },
       "original": {
