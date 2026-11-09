@@ -13,7 +13,6 @@
     aarch64-darwin = [
       "hibernation"
       "lixPackageSets.latest.lix"
-      # "webots"
       "vicinae-vscode-recents" # mbp, linked by home.gui.vicinae
     ];
   };
