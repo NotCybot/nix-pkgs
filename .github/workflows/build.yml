@@ -81,11 +81,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       # dependencies we built before (e.g. openusd for blender-cuda) come from our cache instead of rebuilding
+      # nix-community has the unfree CUDA redists (nvcc, cublas, ...), prepare already counts it as a cache
       - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31
         with:
           extra_nix_config: |
-            extra-substituters = ${{ env.CACHE_URL }}/api/nix/${{ env.CACHE_NAME }}
-            extra-trusted-public-keys = hibernation-main-1:55dN5jsloavB+taHqzrK5QFR/RwkTRic1CixUxfpbdU=
+            extra-substituters = ${{ env.CACHE_URL }}/api/nix/${{ env.CACHE_NAME }} https://nix-community.cachix.org
+            extra-trusted-public-keys = hibernation-main-1:55dN5jsloavB+taHqzrK5QFR/RwkTRic1CixUxfpbdU= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
       - uses: tailscale/github-action@064b10558093f38325e838ddea35486bdc6b1d5c # v4
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
