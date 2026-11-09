@@ -23,14 +23,17 @@ let
     gcc15Stdenv = final.stdenv;
   };
   soulver = inputs.soulver-cpp.packages.${system}.default;
+
+  # nixpkgs' cargo setup hook now forces system libs (aws-lc, zstd, ...) the upstream flakes don't provide
+  withVendoredLibs = pkg: pkg.overrideAttrs { dontCargoUseSystemLibs = true; };
 in
 prev.lib.genAttrs' vicinaeExtensions (
   ext: prev.lib.nameValuePair "vicinae-${ext}" inputs.vicinae-extensions.packages.${system}.${ext}
 )
 // {
   inherit (inputs.hyprland.packages.${system}) hyprland xdg-desktop-portal-hyprland;
-  hibernation = inputs.hibernation.packages.${system}.default;
-  corona = inputs.corona.packages.${system}.default;
+  hibernation = withVendoredLibs inputs.hibernation.packages.${system}.default;
+  corona = withVendoredLibs inputs.corona.packages.${system}.default;
 
   # VS Code 1.13x dropped history.recentlyOpenedPathsList, fall back to the storage.json menu cache
   vicinae-vscode-recents =
