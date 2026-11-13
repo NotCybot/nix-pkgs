@@ -29,6 +29,7 @@ prev.lib.genAttrs' vicinaeExtensions (
 )
 // {
   inherit (inputs.hyprland.packages.${system}) hyprland xdg-desktop-portal-hyprland;
+  inherit (inputs.lanzaboote.packages.${system}) lzbt;
   hibernation = inputs.hibernation.packages.${system}.default;
   corona = inputs.corona.packages.${system}.default;
 

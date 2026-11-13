@@ -4,12 +4,22 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     systems.url = "github:nix-systems/default";
+    flake-compat.url = "github:NixOS/flake-compat";
+
+    git-hooks = {
+      url = "github:cachix/git-hooks.nix";
+      inputs = {
+        nixpkgs.follows = "nixpkgs";
+        flake-compat.follows = "flake-compat";
+      };
+    };
 
     hyprland = {
       url = "github:hyprwm/Hyprland";
       inputs = {
         nixpkgs.follows = "nixpkgs";
         systems.follows = "systems";
+        pre-commit-hooks.follows = "git-hooks";
       };
     };
 
@@ -33,12 +43,27 @@
         nixpkgs.follows = "nixpkgs";
         vicinae.follows = "vicinae";
         systems.follows = "systems";
+        flake-compat.follows = "flake-compat";
       };
     };
 
     corona = {
       url = "github:profiidev/corona";
       inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    lanzaboote = {
+      url = "github:nix-community/lanzaboote/v1.1.0";
+      inputs = {
+        nixpkgs.follows = "nixpkgs";
+        rust-overlay.follows = "rust-overlay";
+        pre-commit.follows = "git-hooks";
+      };
     };
 
     hibernation = {
@@ -78,6 +103,11 @@
       );
 
       # nix-config imports modules from these
-      inherit (inputs) hyprland vicinae corona;
+      inherit (inputs)
+        hyprland
+        vicinae
+        corona
+        lanzaboote
+        ;
     };
 }

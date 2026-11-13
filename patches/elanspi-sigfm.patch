@@ -1,0 +1,266 @@
+diff --git a/libfprint/drivers/elanspi.c b/libfprint/drivers/elanspi.c
+index 9338013..ede8a79 100644
+--- a/libfprint/drivers/elanspi.c
++++ b/libfprint/drivers/elanspi.c
+@@ -76,6 +76,7 @@ struct _FpiDeviceElanSpi
+   guint16 *prev_frame_image;
+ 
+   gint     fp_empty_counter;
++  gint     fp_press_frames;
+   GSList  *fp_frame_list;
+ 
+   /* wait ctx */
+@@ -401,12 +402,12 @@ elanspi_determine_sensor (FpiDeviceElanSpi *self, GError **err)
+   if (fpi_device_get_driver_data (FP_DEVICE (self)) & ELANSPI_HV_FLIPPED)
+     {
+       self->frame_width = self->sensor_height;
+-      self->frame_height = self->sensor_width > ELANSPI_MAX_FRAME_HEIGHT ? ELANSPI_MAX_FRAME_HEIGHT : self->sensor_width;
++      self->frame_height = self->sensor_width;
+     }
+   else
+     {
+       self->frame_width = self->sensor_width;
+-      self->frame_height = self->sensor_height > ELANSPI_MAX_FRAME_HEIGHT ? ELANSPI_MAX_FRAME_HEIGHT : self->sensor_height;
++      self->frame_height = self->sensor_height;
+     }
+ }
+ 
+@@ -1323,70 +1324,62 @@ elanspi_process_frame (FpiDeviceElanSpi *self, const guint16 *data_in, guint8 *d
+     }
+ }
+ 
+-static unsigned char
+-elanspi_fp_assembling_get_pixel (struct fpi_frame_asmbl_ctx *ctx, struct fpi_frame *frame, unsigned int x, unsigned int y)
+-{
+-  return frame->data[y * ctx->frame_width + x];
+-}
+-
++/* separable gaussian blur (sigma ~1.2) against sensor speckle */
+ static void
+-elanspi_fp_frame_stitch_and_submit (FpiDeviceElanSpi *self)
++elanspi_smooth_image (FpImage *img)
+ {
+-  g_autoptr(FpImage) img = NULL;
+-  g_autoptr(FpImage) scaled = NULL;
+-  struct fpi_frame_asmbl_ctx assembling_ctx = {
+-    .image_width = (self->frame_width * 3) / 2,
+-
+-    .frame_width = self->frame_width,
+-    .frame_height = self->frame_height,
+-
+-    .get_pixel = elanspi_fp_assembling_get_pixel,
+-  };
+-
+-  /* stitch image */
+-  GSList *frame_start = g_slist_nth (self->fp_frame_list, ELANSPI_SWIPE_FRAMES_DISCARD);
++  static const guint kern[7] = { 34, 111, 218, 298, 218, 111, 34 };
++  guint w = img->width, h = img->height;
++  g_autofree guint8 *tmp = g_malloc (w * h);
++  guint8 *data = img->data;
+ 
+-  fpi_do_movement_estimation (&assembling_ctx, frame_start);
+-  img = fpi_assemble_frames (&assembling_ctx, frame_start);
+-  scaled = fpi_image_resize (img, 2, 2);
+-
+-  scaled->flags |= FPI_IMAGE_PARTIAL | FPI_IMAGE_COLORS_INVERTED;
+-
+-  /* submit image */
+-  fpi_image_device_image_captured (FP_IMAGE_DEVICE (self), g_steal_pointer (&scaled));
+-
+-  /* clean out frame data */
+-  g_slist_free_full (g_steal_pointer (&self->fp_frame_list), g_free);
++  for (guint y = 0; y < h; y++)
++    for (guint x = 0; x < w; x++)
++      {
++        guint acc = 0, wsum = 0;
++        for (gint k = -3; k <= 3; k++)
++          {
++            gint xx = (gint) x + k;
++            if (xx < 0 || xx >= (gint) w)
++              continue;
++            acc += kern[k + 3] * data[y * w + xx];
++            wsum += kern[k + 3];
++          }
++        tmp[y * w + x] = acc / wsum;
++      }
++  for (guint y = 0; y < h; y++)
++    for (guint x = 0; x < w; x++)
++      {
++        guint acc = 0, wsum = 0;
++        for (gint k = -3; k <= 3; k++)
++          {
++            gint yy = (gint) y + k;
++            if (yy < 0 || yy >= (gint) h)
++              continue;
++            acc += kern[k + 3] * tmp[yy * w + x];
++            wsum += kern[k + 3];
++          }
++        data[y * w + x] = acc / wsum;
++      }
+ }
+ 
+-static gint64
+-elanspi_get_frame_diff_stddev_sq (FpiDeviceElanSpi *self, guint16 *frame1, guint16 *frame2)
++/* area sensor: submit one full frame instead of stitching a swipe */
++static void
++elanspi_fp_press_submit (FpiDeviceElanSpi *self)
+ {
+-  gint64 mean = 0;
+-  gint64 sq_stddev = 0;
+-
+-  for (int j = 0; j < (self->sensor_height * self->sensor_width); j += 1)
+-    mean += abs ((int) frame1[j] - (int) frame2[j]);
++  g_autoptr(FpImage) img = fp_image_new (self->frame_width, self->frame_height);
+ 
+-  g_assert (self->sensor_height && self->sensor_width); /* make clang happy about div0 */
+-  mean /= (self->sensor_height * self->sensor_width);
++  elanspi_correct_with_bg (self, self->last_image);
++  elanspi_process_frame (self, self->last_image, img->data);
++  elanspi_smooth_image (img);
++  img->flags |= FPI_IMAGE_COLORS_INVERTED;
+ 
+-  for (int j = 0; j < (self->sensor_height * self->sensor_width); j += 1)
+-    {
+-      gint64 k = abs ((int) frame1[j] - (int) frame2[j]) - mean;
+-      sq_stddev += k * k;
+-    }
+-
+-  sq_stddev /= (self->sensor_height * self->sensor_width);
+-
+-  return sq_stddev;
++  fpi_image_device_image_captured (FP_IMAGE_DEVICE (self), g_steal_pointer (&img));
+ }
+ 
+ static void
+ elanspi_fp_frame_handler (FpiSsm *ssm, FpiDeviceElanSpi *self)
+ {
+-  g_autofree struct fpi_frame *this_frame = NULL;
+-
+   switch (elanspi_guess_image (self, self->last_image))
+     {
+     case ELANSPI_GUESS_UNKNOWN:
+@@ -1398,62 +1391,20 @@ elanspi_fp_frame_handler (FpiSsm *ssm, FpiDeviceElanSpi *self)
+       fp_dbg ("<fp_frame> got empty");
+       if (self->fp_empty_counter > 1)
+         {
+-          fp_dbg ("<fp_frame> have enough debounce");
+-          if (g_slist_length (self->fp_frame_list) >= ELANSPI_MIN_FRAMES_SWIPE)
+-            {
+-              fp_dbg ("<fp_frame> have enough frames, submitting");
+-              elanspi_fp_frame_stitch_and_submit (self);
+-            }
+-          else
+-            {
+-              fp_dbg ("<fp_frame> not enough frames, reporting short swipe");
+-              fpi_image_device_retry_scan (FP_IMAGE_DEVICE (self), FP_DEVICE_RETRY_TOO_SHORT);
+-            }
++          fp_dbg ("<fp_frame> finger lifted before settling");
++          fpi_image_device_retry_scan (FP_IMAGE_DEVICE (self), FP_DEVICE_RETRY_GENERAL);
+           goto finish_capture;
+         }
+       break;
+ 
+     case ELANSPI_GUESS_FINGERPRINT:
+-      if (self->fp_empty_counter && self->fp_frame_list)
+-        {
+-          if (self->fp_empty_counter < 1)
+-            {
+-              fp_dbg ("<fp_frame> possible bounced fp");
+-              break;
+-            }
+-          else
+-            {
+-              fp_dbg ("<fp_frame> too many empties, clearing list");
+-              g_slist_free_full (g_steal_pointer (&self->fp_frame_list), g_free);
+-              self->fp_empty_counter = 0;
+-            }
+-        }
+-
+-      if (g_slist_length (self->fp_frame_list) > ELANSPI_MAX_FRAMES_SWIPE)
+-        {
+-          fp_dbg ("<fp_frame> have enough frames, exiting now");
+-          elanspi_fp_frame_stitch_and_submit (self);
+-          goto finish_capture;
+-        }
+-
+-      /* append image */
+-      this_frame = g_malloc0 (self->sensor_height * self->sensor_width + sizeof (struct fpi_frame));
+-      elanspi_correct_with_bg (self, self->last_image);
+-      elanspi_process_frame (self, self->last_image, this_frame->data);
+-
+-      if (self->fp_frame_list)
+-        {
+-          gint difference = elanspi_get_frame_diff_stddev_sq (self, self->last_image, self->prev_frame_image);
+-          fp_dbg ("<fp_frame> diff = %d", difference);
+-          if (difference < ELANSPI_MIN_FRAME_TO_FRAME_DIFF)
+-            {
+-              fp_dbg ("<fp_frame> ignoring b.c. difference is too small");
+-              break;
+-            }
+-        }
+-      self->fp_frame_list = g_slist_prepend (self->fp_frame_list, g_steal_pointer (&this_frame));
+-      memcpy (self->prev_frame_image, self->last_image, self->sensor_height * self->sensor_width * 2);
+-      break;
++      self->fp_empty_counter = 0;
++      self->fp_press_frames += 1;
++      if (self->fp_press_frames < ELANSPI_PRESS_SETTLE_FRAMES)
++        break;
++      fp_dbg ("<fp_frame> finger settled, submitting %ux%u", self->frame_width, self->frame_height);
++      elanspi_fp_press_submit (self);
++      goto finish_capture;
+     }
+ 
+   if (self->sensor_id == 0xe)
+@@ -1466,6 +1417,8 @@ elanspi_fp_frame_handler (FpiSsm *ssm, FpiDeviceElanSpi *self)
+ finish_capture:
+   /* prepare for wait up */
+   self->finger_wait_debounce = 0;
++  self->fp_empty_counter = 0;
++  self->fp_press_frames = 0;
+   fpi_ssm_jump_to_state (ssm, ELANSPI_FPCAPT_WAITUP_CAPTURE);
+   return;
+ 
+@@ -1481,6 +1434,8 @@ elanspi_fp_capture_ssm_handler (FpiSsm *ssm, FpDevice *dev)
+     {
+     case ELANSPI_FPCAPT_INIT:
+       self->finger_wait_debounce = 0;
++      self->fp_empty_counter = 0;
++      self->fp_press_frames = 0;
+ 
+       fpi_ssm_next_state (ssm);
+       return;
+@@ -1698,10 +1653,11 @@ fpi_device_elanspi_class_init (FpiDeviceElanSpiClass *klass)
+   dev_class->full_name = "ElanTech Embedded Fingerprint Sensor";
+   dev_class->type = FP_DEVICE_TYPE_UDEV;
+   dev_class->id_table = elanspi_id_table;
+-  dev_class->scan_type = FP_SCAN_TYPE_SWIPE;
+-  dev_class->nr_enroll_stages = 7;       /* these sensors are very hit or miss, may as well record a few extras */
++  dev_class->scan_type = FP_SCAN_TYPE_PRESS;
++  dev_class->nr_enroll_stages = 12;
+ 
+-  img_class->bz3_threshold = 24;
++  img_class->algorithm = FPI_DEVICE_ALGO_SIGFM;
++  img_class->bz3_threshold = 100;
+   img_class->img_open = elanspi_open;
+   img_class->activate = elanspi_activate;
+   img_class->deactivate = elanspi_deactivate;
+diff --git a/libfprint/drivers/elanspi.h b/libfprint/drivers/elanspi.h
+index a8d7319..cb415bc 100644
+--- a/libfprint/drivers/elanspi.h
++++ b/libfprint/drivers/elanspi.h
+@@ -341,6 +341,7 @@ static const struct elanspi_regtable elanspi_calibration_table_new_page1 = {
+ // using checkargs ACPI:HIDPID
+ static const FpIdEntry elanspi_id_table[] = {
+   {.udev_types = ELANSPI_UDEV_TYPES, .spi_acpi_id = "ELAN7001", .hid_id = {.vid = ELANSPI_TP_VID, .pid = 0x3057}, .driver_data = ELANSPI_180_ROTATE},
++  {.udev_types = ELANSPI_UDEV_TYPES, .spi_acpi_id = "ELAN7001", .hid_id = {.vid = ELANSPI_TP_VID, .pid = 0x30be}, .driver_data = ELANSPI_NO_ROTATE},
+   {.udev_types = ELANSPI_UDEV_TYPES, .spi_acpi_id = "ELAN7001", .hid_id = {.vid = ELANSPI_TP_VID, .pid = 0x3087}, .driver_data = ELANSPI_180_ROTATE},
+   {.udev_types = ELANSPI_UDEV_TYPES, .spi_acpi_id = "ELAN7001", .hid_id = {.vid = ELANSPI_TP_VID, .pid = 0x30c6}, .driver_data = ELANSPI_180_ROTATE},
+   {.udev_types = ELANSPI_UDEV_TYPES, .spi_acpi_id = "ELAN70A1", .hid_id = {.vid = ELANSPI_TP_VID, .pid = 0x3134}, .driver_data = ELANSPI_90LEFT_ROTATE},
+@@ -366,6 +367,7 @@ static const FpIdEntry elanspi_id_table[] = {
+ #define ELANSPI_MAX_EMPTY_STDDEV (350 * 350)
+ 
+ #define ELANSPI_MIN_FRAMES_DEBOUNCE 2
++#define ELANSPI_PRESS_SETTLE_FRAMES 2
+ 
+ #define ELANSPI_SWIPE_FRAMES_DISCARD 1
+ #define ELANSPI_MIN_FRAMES_SWIPE (7 + ELANSPI_SWIPE_FRAMES_DISCARD)
